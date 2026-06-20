@@ -30,3 +30,4 @@ FROM caddy:${CONTAINER_VERSION}-alpine
 ARG CONTAINER_VERSION
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+COPY --from=builder /usr/share/thruk /usr/share/thruk
