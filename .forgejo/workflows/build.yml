@@ -19,6 +19,8 @@ jobs:
           platforms: ${{ vars.PLATFORMS || 'linux/amd64,linux/arm64' }}
           username: ${{ vars.PACKAGE_UPLOAD_USER || github.actor }}
           password: ${{ secrets.PACKAGE_UPLOAD_TOKEN || secrets.PUSH_TOKEN }}
+          dockerhub_username: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub_password: ${{ secrets.DOCKERHUB_PASSWORD }}
           email_notification: ${{ vars.EMAIL_NOTIFICATION || 'true' }}
           smtp_server: ${{ vars.SMTP_SERVER || 'smtp.erdely.in:587' }}
           smtp_to_address: ${{ vars.SMTP_TO_ADDRESS || 'mike@erdelynet.com' }}
