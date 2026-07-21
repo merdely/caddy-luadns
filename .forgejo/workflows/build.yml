@@ -1,172 +1,32 @@
-name: Build Docker Image
+name: Container Build Action
 
 on:
   push:
-    branches:
-      - '**'
+    # branches:
+    #   - '**'
     tags:
       - '**'
   workflow_dispatch:
 
 jobs:
   build:
-    if: |
-      (github.event_name == 'push' && github.ref_type == 'branch' && (vars.BUILD_BRANCHES || '1') != 'false' && (vars.BUILD_BRANCHES || '1') != 'no' && (vars.BUILD_BRANCHES || '1') != '0') ||
-      (github.event_name == 'push' && github.ref_type == 'tag'    && (vars.BUILD_TAGS || '1')     != 'false' && (vars.BUILD_TAGS || '1')     != 'no' && (vars.BUILD_TAGS || '1')     != '0') ||
-      (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Determine Build Action and Tags
-        id: build_logic
-        run: |
-          do_build=false
-          is_latest=false
-          [ -z "$(git tag)" ] && has_tags=false || has_tags=true
-
-          # if repo has tags
-          if $has_tags; then
-
-            # get latest tag
-            latest_tag=$(git tag | sort -Vr | head -n1)
-
-            # if commit was not to tags, bail
-            if [[ ! ${{github.ref}} == refs/tags/* ]]; then
-              do_build=false
-
-            # if commit was to latest tag, do build and tag latest
-            elif [ "${{github.ref_name}}" = "$latest_tag" ]; then
-              do_build=true
-              is_latest=true
-
-            # if commit was not to latest tag, build tag and do not tag latest
-            else
-              do_build=true
-              is_latest=false
-            fi
-
-          # if repo does not have tags
-          else
-
-            # if commit was to main or master branch (no tags), build and tag latest
-            if [[ ${{github.ref}} =~ ^refs/heads/(main|master)$ ]]; then
-              do_build=true
-              is_latest=true
-
-            # if commit was to another branch (no tags), build and do not tag latest
-            else
-              do_build=true
-              is_latest=false
-            fi
-          fi
-
-          # determine if qemu step is needed
-          HOST_ARCH=$(uname -m)
-          PLATFORMS="${{vars.PLATFORMS||'linux/amd64,linux/arm64'}}"
-          if [[ "$HOST_ARCH" == "x86_64" && "$PLATFORMS" == *"linux/arm"* ]] || \
-             [[ "$HOST_ARCH" == "aarch64" && "$PLATFORMS" == *"linux/amd64"* ]]; then
-            echo "qemu_needed=true" | tee -a $GITHUB_OUTPUT
-          else
-            echo "qemu_needed=false" | tee -a $GITHUB_OUTPUT
-          fi
-
-          # print github.ref
-          echo github.ref=${{github.ref}}
-
-          # save step variables
-          echo do_build=$do_build | tee -a $GITHUB_OUTPUT
-          echo is_latest=$is_latest | tee -a $GITHUB_OUTPUT
-          echo has_tags=$has_tags | tee -a $GITHUB_OUTPUT
-
-      - name: Set up QEMU
-        if: steps.build_logic.outputs.do_build == 'true' && steps.build_logic.outputs.qemu_needed == 'true'
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        if: steps.build_logic.outputs.do_build == 'true'
-        uses: docker/setup-buildx-action@v4
-
-      - name: Login to Forgejo Container Registry
-        if: steps.build_logic.outputs.do_build == 'true'
-        uses: docker/login-action@v4
+      - name: Build Container
+        uses: docker/container-build@main
         with:
-          registry: src.erdely.in
-          username: ${{ github.actor }}
-          password: ${{ secrets.PUSH_TOKEN }}
-
-      - name: Extract metadata
-        if: steps.build_logic.outputs.do_build == 'true'
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: src.erdely.in/${{ github.repository }}
-          # Default to NOT latest
-          flavor: |
-            latest=false
-          tags: |
-            # Handle tags like v1.3.6 (includes tags like v1.3.6-r9)
-            type=semver,pattern={{ version }},enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-            type=semver,pattern={{ major }}.{{ minor }},enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-            type=semver,pattern={{ major }},enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Save tags like v1.3.6 when tag is v1.3.6-r9
-            type=match,pattern=v(\d+\.\d+\.\d+)-.+,group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Save tags like v1.3.6 when tag is v1.3.6p1-r9
-            type=match,pattern=v(\d+\.\d+\.\d+)p[0-9]+.*,group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Save tags like v1.3.6p1 when tag is v1.3.6p1-r9
-            type=match,pattern=v(\d+\.\d+\.\d+p[0-9]+).*,group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Save tags like v1.3.6p1-r9 when tag is v1.3.6p1-r9
-            type=match,pattern=v(\d+\.\d+\.\d+p[0-9]+.*)$,group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Handle partial tags like v1.3
-            type=match,pattern=v(\d+\.\d+),group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Handle partial tags like v1
-            type=match,pattern=v(\d+),group=1,enable=${{ steps.build_logic.outputs.has_tags == 'true' }}
-
-            # Handle branch not latest
-            type=ref,event=branch,enable=${{ steps.build_logic.outputs.has_tags == 'false' && steps.build_logic.outputs.is_latest == 'false' }}
-
-            # Handle latest tag
-            type=raw,value=latest,enable=${{ steps.build_logic.outputs.is_latest == 'true' }}
-
-      - name: Build and push
-        if: steps.build_logic.outputs.do_build == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
+          registry: ${{ vars.REGISTRY || 'src.erdely.in' }}
           platforms: ${{ vars.PLATFORMS || 'linux/amd64,linux/arm64' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-
-
-      - name: Send email notification
-        if: (vars.EMAIL_NOTIFICATION || 'true') == 'true'
-        run: |
-          # Define which Source Control Management tool in use
-          scm=GitHub
-          [ -n "$GITEA_ACTIONS" ] && scm=Gitea
-          [ -n "$FORGEJO_ACTIONS" ] && scm=Forgejo
-
-          # Send email notification
-          emailfile=$(mktemp)
-          echo "From: $scm Sync Bot <root@erdelynet.com>" > "$emailfile"
-          echo "To: Michael Erdely <mike@erdelynet.com>" >> "$emailfile"
-          echo "Subject: [$scm Actions] Built ${{github.repository}} ${{github.ref_name}}" >> "$emailfile"
-          echo "Date: $(date +"%a, %m %b %Y %H:%M:%S")" >> "$emailfile"
-          echo >> "$emailfile"
-          echo "${{github.repository}} ${{github.ref_name}} was built" >> "$emailfile"
-          echo >> "$emailfile"
-
-          curl --ssl-reqd smtp://smtp.erdely.in:587 \
-            --mail-from root@erdelynet.com \
-            --mail-rcpt mike@erdelynet.com --upload-file "$emailfile"
-          rm -f "$emailfile"
+          username: ${{ vars.PACKAGE_UPLOAD_USER || github.actor }}
+          password: ${{ secrets.PACKAGE_UPLOAD_TOKEN || secrets.PUSH_TOKEN }}
+          email_notification: ${{ vars.EMAIL_NOTIFICATION || 'true' }}
+          smtp_server: ${{ vars.SMTP_SERVER || 'smtp.erdely.in:587' }}
+          smtp_to_address: ${{ vars.SMTP_TO_ADDRESS || 'mike@erdelynet.com' }}
+          smtp_to_name: ${{ vars.SMTP_TO_NAME || 'Michael Erdely' }}
+          smtp_from_address: ${{ vars.SMTP_FROM_ADDRESS || 'git@erdelynet.com' }}
+          smtp_username: ${{ vars.SMTP_USERNAME || 'forgejo_actions' }}
+          smtp_password: ${{ secrets.SMTP_PASSWORD }}
+          smtp_ssl: ${{ vars.SMTP_SSL  || 'true' }}
+          smtp_resolve: ${{ vars.SMTP_RESOLVE || 'smtp.erdely.in:587:192.168.201.18' }}
+          smtp_verbose: ${{ vars.SMTP_VERBOSE || 'false' }}
 
