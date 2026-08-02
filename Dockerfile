@@ -8,7 +8,8 @@ ARG CONTAINER_VERSION
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    xcaddy build --with github.com/caddy-dns/luadns
+    xcaddy build --with github.com/caddy-dns/luadns \
+                 --with github.com/mholt/caddy-l4
 
 FROM caddy:${CONTAINER_VERSION}-alpine
 
