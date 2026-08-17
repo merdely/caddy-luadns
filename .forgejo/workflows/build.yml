@@ -29,6 +29,6 @@ jobs:
           smtp_username: ${{ vars.SMTP_USERNAME || 'forgejo_actions' }}
           smtp_password: ${{ secrets.SMTP_PASSWORD }}
           smtp_ssl: ${{ vars.SMTP_SSL  || 'true' }}
-          smtp_resolve: ${{ vars.SMTP_RESOLVE || 'smtp.erdely.in:587:192.168.201.18' }}
+          smtp_resolve: ${{ vars.SMTP_RESOLVE }}
           smtp_verbose: ${{ vars.SMTP_VERBOSE || 'false' }}
 
