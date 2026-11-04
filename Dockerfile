@@ -1,4 +1,4 @@
-ARG CONTAINER_VERSION=2.11.7
+ARG CONTAINER_VERSION=2.11.8
 FROM caddy:${CONTAINER_VERSION}-builder-alpine AS builder
 
 # To force Caddy to build with the latest version, bump BUMP number
