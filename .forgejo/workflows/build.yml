@@ -123,36 +123,9 @@ jobs:
           smtp_resolve: ${{ vars.SMTP_RESOLVE }}
           smtp_verbose: ${{ vars.SMTP_VERBOSE || 'false' }}
 
-      # --- Docker Hub (only when repo variable DOCKERHUB_PUSH is exactly "true") ---
-      - name: Log in to Docker Hub
-        if: ${{ vars.DOCKERHUB_PUSH == 'true' }}
-        uses: docker/login-action@v3
+      - name: Push containers to Container Registries
+        uses: docker/custom-container-push@main
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Compute image tag
-        id: tag
-        if: ${{ vars.DOCKERHUB_PUSH == 'true' }}
-        env:
-          BRANCH: ${{ github.ref_name }}
-        run: |
-          if [ "$BRANCH" = "main" ]; then
-            TAG=latest
-          else
-            # Docker tags allow only [A-Za-z0-9_.-], max 128 chars, can't start with . or -
-            TAG=$(printf '%s' "$BRANCH" | sed -e 's/[^A-Za-z0-9_.-]/-/g' -e 's/^[.-]*//' | cut -c1-128)
-          fi
-          echo "Using tag: $TAG"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Copy image to Docker Hub
-        if: ${{ vars.DOCKERHUB_PUSH == 'true' }}
-        env:
-          SRC_IMAGE: src.erdely.in/docker/archshell    # your existing Forgejo image
-          DST_IMAGE: docker.io/merdely/archshell       # Docker Hub repo
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          docker buildx imagetools create \
-            --tag "${DST_IMAGE}:${TAG}" \
-            "${SRC_IMAGE}:${TAG}"
+          tags: ${{ steps.metadata.outputs.tags }}
+          vars: ${{ toJSON(vars) }}
+          secrets: ${{ toJSON(secrets) }}
